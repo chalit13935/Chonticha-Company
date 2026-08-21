@@ -1,1 +1,434 @@
-# Chonticha-Company
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบบริหารจัดการบริษัท และการต่ออายุสัญญา</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Sarabun', sans-serif; background-color: #f8fafc; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .gradient-brand { background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%); }
+    @media (max-width: 767px) { .content-body { padding-bottom: 80px; } }
+  </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col md:flex-row">
+
+  <script>
+    // ⚠️ ใส่ URL Web App ของ Google Apps Script ที่ Deploy เรียบร้อยแล้วตรงนี้
+    const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyCCrVMrwzA-NmIyUl1J1w6lHGlbHHFL4hTKHZsAtNMF-9VQ4ZatwBisOmfLGQf26cexA/exec";
+  </script>
+
+  <!-- Sidebar สำหรับ Desktop -->
+  <aside class="w-64 bg-white min-h-screen border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-screen z-50">
+    <div class="p-5 border-b border-slate-100 flex items-center gap-3 gradient-brand text-white">
+      <div class="font-bold text-sm tracking-tight uppercase">🏢 Company Renewal</div>
+    </div>
+    <nav class="flex-1 p-4 space-y-1">
+      <button onclick="switchView('dashboard')" id="menu-dashboard" class="w-full flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-xl transition-all gradient-brand text-white shadow-sm">📊 แดชบอร์ดสรุปภาพรวม</button>
+      <button onclick="switchView('companies')" id="menu-companies" class="w-full flex items-center gap-3 px-4 py-3 text-xs font-medium rounded-xl transition-all text-slate-500 hover:bg-slate-50">🏢 รายชื่อบริษัททั้งหมด</button>
+      <button onclick="switchView('add-company')" id="menu-add-company" class="w-full flex items-center gap-3 px-4 py-3 text-xs font-medium rounded-xl transition-all text-slate-500 hover:bg-slate-50">➕ บันทึก/เพิ่มบริษัทใหม่</button>
+    </nav>
+  </aside>
+
+  <!-- Bottom Navigation สำหรับ Mobile -->
+  <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-lg z-50 flex justify-around items-center py-2">
+    <button onclick="switchView('dashboard')" id="mb-menu-dashboard" class="flex flex-col items-center text-slate-900 font-bold"><span class="text-xl">📊</span><span class="text-[10px]">ภาพรวม</span></button>
+    <button onclick="switchView('companies')" id="mb-menu-companies" class="flex flex-col items-center text-slate-400 font-medium"><span class="text-xl">🏢</span><span class="text-[10px]">รายชื่อบริษัท</span></button>
+    <button onclick="switchView('add-company')" id="mb-menu-add-company" class="flex flex-col items-center text-slate-400 font-medium"><span class="text-xl">➕</span><span class="text-[10px]">เพิ่มบริษัท</span></button>
+  </div>
+
+  <!-- Main Content -->
+  <div class="flex-1 flex flex-col min-w-0 content-body">
+    <header class="bg-white border-b border-slate-200 px-4 py-3 flex justify-between items-center sticky top-0 z-40">
+      <div>
+        <span class="text-[9px] text-indigo-600 font-bold uppercase" id="period-title">ระบบจัดการสัญญาและวันหมดอายุ</span>
+        <h1 class="text-base font-bold text-slate-900" id="main-view-title">COMPANY RENEWAL SYSTEM</h1>
+      </div>
+      <button onclick="fetchDataFromServer()" class="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 hover:bg-slate-800 transition">🔄 โหลดข้อมูลใหม่</button>
+    </header>
+
+    <main class="p-4 space-y-4 max-w-7xl w-full mx-auto">
+      
+      <!-- VIEW 1: DASHBOARD -->
+      <div id="view-dashboard" class="space-y-4">
+        
+        <!-- กล่องแจ้งเตือนสัญญาเร่งด่วน -->
+        <div class="bg-gradient-to-r from-amber-500 to-rose-600 text-white rounded-2xl p-4 shadow-md">
+          <h3 class="text-xs font-bold text-amber-100 mb-2">⚠️ บริษัทที่สัญญาใกล้หมดอายุ (ภายใน 30 วัน)</h3>
+          <div id="urgent-live-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div class="text-center py-2 text-xs text-amber-100 col-span-full">กำลังตรวจสอบข้อมูลสัญญา...</div>
+          </div>
+        </div>
+
+        <!-- การ์ดตัวเลขสรุปภาพรวม -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
+            <p class="text-[10px] text-slate-400 font-bold uppercase">บริษัททั้งหมด</p>
+            <h2 class="text-2xl font-black text-slate-900" id="total-companies-count">0 <span class="text-xs font-normal text-slate-400">แห่ง</span></h2>
+          </div>
+          <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
+            <p class="text-[10px] text-emerald-500 font-bold uppercase">สถานะปกติ</p>
+            <h2 class="text-2xl font-black text-emerald-600" id="status-normal-count">0 <span class="text-xs font-normal text-slate-400">แห่ง</span></h2>
+          </div>
+          <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
+            <p class="text-[10px] text-amber-500 font-bold uppercase">ใกล้หมดอายุ</p>
+            <h2 class="text-2xl font-black text-amber-500" id="status-warning-count">0 <span class="text-xs font-normal text-slate-400">แห่ง</span></h2>
+          </div>
+          <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
+            <p class="text-[10px] text-rose-500 font-bold uppercase">หมดอายุแล้ว</p>
+            <h2 class="text-2xl font-black text-rose-600" id="status-expired-count">0 <span class="text-xs font-normal text-slate-400">แห่ง</span></h2>
+          </div>
+        </div>
+
+        <!-- กราฟสถิติ -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+            <h3 class="text-xs font-bold text-slate-700 mb-2">📊 สัดส่วนสถานะสัญญาบริษัท</h3>
+            <div class="h-48 relative"><canvas id="statusChart"></canvas></div>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col">
+            <h3 class="text-xs font-bold text-slate-700 mb-2">🏢 แบ่งตามประเภทธุรกิจ</h3>
+            <div class="h-36 relative flex justify-center items-center mx-auto w-full max-w-[160px]"><canvas id="typeDonutChart"></canvas></div>
+            <div id="donut-legend" class="grid grid-cols-2 gap-2 mt-4 text-[10px] text-slate-500 font-medium"></div>
+          </div>
+        </div>
+
+        <!-- ตารางแสดงรายการล่าสุด -->
+        <div class="bg-white border border-slate-200 overflow-hidden shadow-sm flex flex-col rounded-2xl">
+          <div class="p-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <h3 class="text-xs font-bold text-slate-700 uppercase">📋 รายการบริษัททั้งหมดในระบบ</h3>
+            <input type="text" id="search-box" onkeyup="filterTable()" placeholder="🔍 ค้นชื่อบริษัท..." class="bg-white text-slate-800 border border-slate-300 rounded-xl px-3 py-1 text-xs w-full sm:w-52 focus:outline-none">
+          </div>
+          <div class="overflow-x-auto max-h-80">
+            <table class="w-full text-left text-xs min-w-[600px]" id="raw-table">
+              <thead>
+                <tr class="bg-slate-900 text-white font-semibold sticky top-0">
+                  <th class="px-3 py-2.5">ชื่อบริษัท</th>
+                  <th class="px-3 py-2.5">ประเภทธุรกิจ</th>
+                  <th class="px-3 py-2.5">วันหมดอายุสัญญา</th>
+                  <th class="px-3 py-2.5 text-center">สถานะ</th>
+                  <th class="px-3 py-2.5 text-center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 text-slate-600" id="table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 2: COMPANIES LIST -->
+      <div id="view-companies" class="hidden space-y-4">
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+            <h3 class="text-xs font-bold text-slate-800">🏢 รายชื่อบริษัทและรายละเอียดสัญญา</h3>
+            <input type="text" id="search-comp-view" onkeyup="filterCompanyViewTable()" placeholder="🔍 ค้นหาข้อมูลบริษัท..." class="bg-slate-50 border border-slate-300 text-xs rounded-xl px-3 py-1.5 w-full sm:w-52 focus:outline-none focus:bg-white">
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs min-w-[550px]">
+              <thead>
+                <tr class="bg-slate-900 text-white font-semibold">
+                  <th class="px-4 py-2.5 rounded-l-xl">ชื่อบริษัท</th>
+                  <th class="px-4 py-2.5">ผู้ติดต่อ / เบอร์โทร</th>
+                  <th class="px-4 py-2.5">วันสิ้นสุดสัญญา</th>
+                  <th class="px-4 py-2.5 text-center">สถานะ</th>
+                  <th class="px-4 py-2.5 text-right rounded-r-xl">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 text-slate-600" id="companies-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 3: ADD/EDIT COMPANY FORM -->
+      <div id="view-add-company" class="hidden space-y-4">
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm max-w-2xl mx-auto">
+          <h3 class="text-sm font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">📝 บันทึกข้อมูลบริษัท / ต่ออายุสัญญา</h3>
+          <form id="company-form" onsubmit="handleFormSubmit(event)" class="space-y-3">
+            <input type="hidden" id="form-id">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">ชื่อบริษัท *</label>
+              <input type="text" id="form-name" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-900">
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">ประเภทธุรกิจ</label>
+                <input type="text" id="form-type" placeholder="เช่น ไอที, ขนส่ง, บริการ" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-900">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">ผู้ติดต่อ / เบอร์โทร</label>
+                <input type="text" id="form-contact" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-900">
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">วันเริ่มสัญญา</label>
+                <input type="date" id="form-start-date" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-900">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">วันหมดอายุสัญญา *</label>
+                <input type="date" id="form-expiry-date" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-900">
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">หมายเหตุ</label>
+              <textarea id="form-note" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-900"></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-3">
+              <button type="button" onclick="switchView('companies')" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-500 hover:bg-slate-100">ยกเลิก</button>
+              <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition">💾 บันทึกข้อมูล</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    let rawRecords = [];
+    let statusChartInstance = null;
+    let typeDonutInstance = null;
+
+    document.addEventListener("DOMContentLoaded", function() {
+      fetchDataFromServer();
+    });
+
+    function switchView(viewName) {
+      document.getElementById('view-dashboard').classList.add('hidden');
+      document.getElementById('view-companies').classList.add('hidden');
+      document.getElementById('view-add-company').classList.add('hidden');
+      document.getElementById('view-' + viewName).classList.remove('hidden');
+      
+      ['dashboard', 'companies', 'add-company'].forEach(v => {
+        const btn = document.getElementById('menu-' + v);
+        if(btn) btn.className = "w-full flex items-center gap-3 px-4 py-3 text-xs font-medium rounded-xl transition-all text-slate-500 hover:bg-slate-50";
+        const mbBtn = document.getElementById('mb-menu-' + v);
+        if(mbBtn) mbBtn.className = "flex flex-col items-center text-slate-400 font-medium";
+      });
+      
+      if(document.getElementById('menu-' + viewName)) document.getElementById('menu-' + viewName).className = "w-full flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-xl transition-all gradient-brand text-white shadow-sm";
+      if(document.getElementById('mb-menu-' + viewName)) document.getElementById('mb-menu-' + viewName).className = "flex flex-col items-center text-slate-900 font-bold";
+    }
+
+    function fetchDataFromServer() {
+      if(!GOOGLE_WEB_APP_URL || GOOGLE_WEB_APP_URL.includes("AKfycbw3CNUJYzuTaCdy-LfTwY1D2qjauDU7TBABuIkysdyG5iGqDKs5q5feKJS9AdC_yusjLQ")) {
+        // ดึงข้อมูลผ่าน Fetch API
+      }
+      
+      fetch(GOOGLE_WEB_APP_URL)
+        .then(response => response.json())
+        .then(data => {
+          rawRecords = data.records || data || [];
+          processAndRenderData();
+        })
+        .catch(err => {
+          console.error("Error fetching data:", err);
+        });
+    }
+
+    function calculateStatus(expiryDateStr) {
+      if(!expiryDateStr) return { label: 'ไม่ระบุ', code: 'unknown', color: 'bg-slate-100 text-slate-600' };
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const expDate = new Date(expiryDateStr);
+      const diffTime = expDate - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) {
+        return { label: 'หมดอายุแล้ว', code: 'expired', color: 'bg-rose-100 text-rose-700 font-bold' };
+      } else if (diffDays <= 30) {
+        return { label: `ใกล้หมดอายุ (${diffDays} วัน)`, code: 'warning', color: 'bg-amber-100 text-amber-800 font-bold' };
+      } else {
+        return { label: 'ปกติ', code: 'normal', color: 'bg-emerald-100 text-emerald-700 font-bold' };
+      }
+    }
+
+    function processAndRenderData() {
+      let normalCount = 0, warningCount = 0, expiredCount = 0;
+      let urgentList = [];
+      let typeMap = {};
+
+      rawRecords.forEach(r => {
+        const st = calculateStatus(r.expiryDate || r.expiry_date);
+        r._computedStatus = st;
+
+        if (st.code === 'normal') normalCount++;
+        else if (st.code === 'warning') { warningCount++; urgentList.push(r); }
+        else if (st.code === 'expired') expiredCount++;
+
+        const t = r.type || 'ทั่วไป';
+        typeMap[t] = (typeMap[t] || 0) + 1;
+      });
+
+      document.getElementById('total-companies-count').innerText = rawRecords.length;
+      document.getElementById('status-normal-count').innerText = normalCount;
+      document.getElementById('status-warning-count').innerText = warningCount;
+      document.getElementById('status-expired-count').innerText = expiredCount;
+
+      renderUrgentList(urgentList);
+      renderTable(rawRecords);
+      renderCompanyViewTable(rawRecords);
+      renderCharts(normalCount, warningCount, expiredCount, typeMap);
+    }
+
+    function renderUrgentList(list) {
+      const container = document.getElementById('urgent-live-container');
+      container.innerHTML = '';
+      if(list.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-2 text-xs text-amber-100 bg-black/10 rounded-xl">ไม่มีสัญญาที่ใกล้หมดอายุใน 30 วันนี้</div>`;
+        return;
+      }
+      list.slice(0, 6).forEach(r => {
+        container.insertAdjacentHTML('beforeend', `
+          <div class="bg-white/10 p-2.5 rounded-xl border border-white/20 flex justify-between items-center">
+            <div class="min-w-0 pr-2">
+              <p class="text-xs font-bold text-white truncate">${r.name}</p>
+              <p class="text-[10px] text-amber-100 truncate">หมดอายุ: ${r.expiryDate || r.expiry_date}</p>
+            </div>
+            <span class="bg-white text-rose-600 text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-sm">เร่งด่วน</span>
+          </div>
+        `);
+      });
+    }
+
+    function renderTable(rows) {
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+      if(rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-slate-400">ไม่พบข้อมูลบริษัท</td></tr>';
+        return;
+      }
+      rows.forEach(r => {
+        const st = r._computedStatus || calculateStatus(r.expiryDate || r.expiry_date);
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr class="hover:bg-slate-50">
+            <td class="px-3 py-2.5 font-semibold text-slate-800">${r.name}</td>
+            <td class="px-3 py-2.5 text-slate-500">${r.type || '-'}</td>
+            <td class="px-3 py-2.5 text-slate-600">${r.expiryDate || r.expiry_date || '-'}</td>
+            <td class="px-3 py-2.5 text-center"><span class="px-2 py-0.5 text-[10px] rounded-full ${st.color}">${st.label}</span></td>
+            <td class="px-3 py-2.5 text-center">
+              <button onclick="editCompany('${r.id}')" class="text-indigo-600 hover:text-indigo-800 font-bold text-[11px]">แก้ไข</button>
+            </td>
+          </tr>
+        `);
+      });
+    }
+
+    function renderCompanyViewTable(rows) {
+      const tbody = document.getElementById('companies-table-body');
+      tbody.innerHTML = '';
+      rows.forEach(r => {
+        const st = r._computedStatus || calculateStatus(r.expiryDate || r.expiry_date);
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr class="data-comp-row hover:bg-slate-50">
+            <td class="px-4 py-2.5 font-semibold text-slate-800 target-name">${r.name}</td>
+            <td class="px-4 py-2.5 text-slate-500">${r.contact || '-'}</td>
+            <td class="px-4 py-2.5 text-slate-600">${r.expiryDate || r.expiry_date || '-'}</td>
+            <td class="px-4 py-2.5 text-center"><span class="px-2 py-0.5 text-[10px] rounded-full ${st.color}">${st.label}</span></td>
+            <td class="px-4 py-2.5 text-right">
+              <button onclick="editCompany('${r.id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-[10px] font-bold">แก้ไข/ต่อสัญญา</button>
+            </td>
+          </tr>
+        `);
+      });
+    }
+
+    function filterTable() {
+      const val = document.getElementById('search-box').value.toLowerCase();
+      renderTable(rawRecords.filter(r => r.name.toLowerCase().includes(val)));
+    }
+
+    function filterCompanyViewTable() {
+      const val = document.getElementById('search-comp-view').value.toLowerCase();
+      document.querySelectorAll('.data-comp-row').forEach(row => {
+        if(row.querySelector('.target-name').innerText.toLowerCase().includes(val)) row.classList.remove('hidden');
+        else row.classList.add('hidden');
+      });
+    }
+
+    function renderCharts(normal, warning, expired, typeMap) {
+      const ctx1 = document.getElementById('statusChart').getContext('2d');
+      if(statusChartInstance) statusChartInstance.destroy();
+      statusChartInstance = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: ['ปกติ', 'ใกล้หมดอายุ', 'หมดอายุแล้ว'],
+          datasets: [{
+            label: 'จำนวนบริษัท',
+            data: [normal, warning, expired],
+            backgroundColor: ['#10b981', '#f59e0b', '#f43f5e'],
+            borderRadius: 8
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+
+      const ctx2 = document.getElementById('typeDonutChart').getContext('2d');
+      if(typeDonutInstance) typeDonutInstance.destroy();
+      const labels = Object.keys(typeMap);
+      const data = Object.values(typeMap);
+      typeDonutInstance = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{ data: data, backgroundColor: ['#6366f1', '#a855f7', '#ec4899', '#3b82f6', '#cbd5e1'] }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '70%' }
+      });
+    }
+
+    function editCompany(id) {
+      const comp = rawRecords.find(r => r.id == id);
+      if(!comp) return;
+      document.getElementById('form-id').value = comp.id || '';
+      document.getElementById('form-name').value = comp.name || '';
+      document.getElementById('form-type').value = comp.type || '';
+      document.getElementById('form-contact').value = comp.contact || '';
+      document.getElementById('form-start-date').value = comp.startDate || comp.start_date || '';
+      document.getElementById('form-expiry-date').value = comp.expiryDate || comp.expiry_date || '';
+      document.getElementById('form-note').value = comp.note || '';
+      switchView('add-company');
+    }
+
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      const payload = {
+        action: document.getElementById('form-id').value ? 'update' : 'create',
+        id: document.getElementById('form-id').value,
+        name: document.getElementById('form-name').value,
+        type: document.getElementById('form-type').value,
+        contact: document.getElementById('form-contact').value,
+        startDate: document.getElementById('form-start-date').value,
+        expiryDate: document.getElementById('form-expiry-date').value,
+        note: document.getElementById('form-note').value
+      };
+
+      fetch(GOOGLE_WEB_APP_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      })
+      .then(res => res.json())
+      .then(res => {
+        alert("บันทึกข้อมูลเรียบร้อยแล้วครับ!");
+        document.getElementById('company-form').reset();
+        switchView('dashboard');
+        fetchDataFromServer();
+      })
+      .catch(err => {
+        alert("บันทึกข้อมูลสำเร็จ (หรือเกิดข้อผิดพลาดในการรับ response)");
+        switchView('dashboard');
+        fetchDataFromServer();
+      });
+    }
+  </script>
+</body>
+</html>
